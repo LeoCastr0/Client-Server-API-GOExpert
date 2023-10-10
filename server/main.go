@@ -10,9 +10,11 @@ import (
 	"strconv"
 	"time"
 
-	"gorm.io/driver/mysql"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+var currenciesDatabase = "currencies.db"
 
 type Currencies struct {
 	Currencies ExchangeData `json:"USDBRL"`
@@ -141,14 +143,23 @@ func CreateFile(path string) error {
 	return nil
 }
 
+func initDatabase() (*gorm.DB, error) {
+	db, err := gorm.Open(sqlite.Open(currenciesDatabase), &gorm.Config{})
+	if err != nil {
+		return nil, err
+	}
+	err = db.AutoMigrate(&Currency{})
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
 func AddCurrency(value float64) error {
-	dsn := "root:root@tcp(localhost:3306)/client-server-api?charset=utf8mb4&parseTime=True&loc=Local"
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	db, err := initDatabase()
 	if err != nil {
 		return err
 	}
-	db.AutoMigrate(&Currency{})
-
 	db.Create(&Currency{
 		Value: value,
 	})
