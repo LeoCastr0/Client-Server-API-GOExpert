@@ -165,15 +165,19 @@ func initDatabase() (*gorm.DB, error) {
 }
 
 func AddCurrency(value float64, ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Microsecond)
 	defer cancel()
 	db, err := initDatabase()
 	if err != nil {
 		log.Println(error.Error(err))
 		return err
 	}
-	db.WithContext(ctx).Create(&Currency{
+	result := db.WithContext(ctx).Create(&Currency{
 		Value: value,
 	})
+	if result.Error != nil {
+		log.Println(error.Error(result.Error))
+		return result.Error
+	}
 	return nil
 }
