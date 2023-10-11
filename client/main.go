@@ -3,26 +3,15 @@ package main
 import (
 	"context"
 	"io"
-	"log"
 	"net/http"
 	"time"
 )
 
 func main() {
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
 	defer cancel()
-	ContexHandler(ctx)
-}
-
-func ContexHandler(ctx context.Context) {
 	GetDollar(ctx)
-	select {
-	case <-time.After(300 * time.Millisecond):
-		log.Println("Request successfully processed")
-	case <-ctx.Done():
-		log.Println("Request Cancelled")
-	}
 }
 
 func GetDollar(ctx context.Context) {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -51,18 +52,11 @@ func ExchangeRateHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	ctx := r.Context()
-	select {
-	case <-time.After(200 * time.Millisecond):
-		log.Println("Request successfully processed")
-	case <-ctx.Done():
-		log.Println("Request cancelled by client")
-		w.WriteHeader(http.StatusInternalServerError)
-	}
+	ctx := context.Background()
 	log.Println("Request started")
 	defer log.Println("Request ended")
 
-	exchangeValue, err := ExchangeRate()
+	exchangeValue, err := ExchangeRate(ctx)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -72,7 +66,7 @@ func ExchangeRateHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	err = AddCurrency(floatValue)
+	err = AddCurrency(floatValue, ctx)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -93,24 +87,35 @@ func ExchangeRateHandler(w http.ResponseWriter, r *http.Request) {
 	result, err := json.Marshal(exchangeValue.Bid)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		log.Println(error.Error(err))
 		return
 	}
 	w.Write(result)
 }
 
-func ExchangeRate() (*ExchangeData, error) {
-	resp, err := http.Get("https://economia.awesomeapi.com.br/json/last/USD-BRL")
+func ExchangeRate(ctx context.Context) (*ExchangeData, error) {
+	ctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://economia.awesomeapi.com.br/json/last/USD-BRL", nil)
 	if err != nil {
+		log.Println(error.Error(err))
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(request)
+	if err != nil {
+		log.Println(error.Error(err))
 		return nil, err
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		log.Println(error.Error(err))
 		return nil, err
 	}
 	var currencies Currencies
 	err = json.Unmarshal(body, &currencies)
 	if err != nil {
+		log.Println(error.Error(err))
 		return nil, err
 	}
 	return &currencies.Currencies, nil
@@ -119,12 +124,13 @@ func ExchangeRate() (*ExchangeData, error) {
 func SaveFile(currencyValue string) error {
 	f, err := os.OpenFile("./cotacao.txt", os.O_APPEND|os.O_WRONLY, os.ModeAppend)
 	if err != nil {
+		log.Println(error.Error(err))
 		return err
 	}
 	defer f.Close()
 	_, err = f.WriteString(fmt.Sprintf("Dolar: %v\n", currencyValue))
 	if err != nil {
-		fmt.Printf("Dolar: %v", currencyValue)
+		log.Println(error.Error(err))
 		return err
 	}
 	return nil
@@ -135,6 +141,7 @@ func CreateFile(path string) error {
 	if os.IsNotExist(err) {
 		f, err := os.Create("cotacao.txt")
 		if err != nil {
+			log.Println(error.Error(err))
 			return err
 		}
 		f.Close()
@@ -146,21 +153,26 @@ func CreateFile(path string) error {
 func initDatabase() (*gorm.DB, error) {
 	db, err := gorm.Open(sqlite.Open(currenciesDatabase), &gorm.Config{})
 	if err != nil {
+		log.Println(error.Error(err))
 		return nil, err
 	}
 	err = db.AutoMigrate(&Currency{})
 	if err != nil {
+		log.Println(error.Error(err))
 		return nil, err
 	}
 	return db, nil
 }
 
-func AddCurrency(value float64) error {
+func AddCurrency(value float64, ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
+	defer cancel()
 	db, err := initDatabase()
 	if err != nil {
+		log.Println(error.Error(err))
 		return err
 	}
-	db.Create(&Currency{
+	db.WithContext(ctx).Create(&Currency{
 		Value: value,
 	})
 	return nil
